@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClipCheck 3D - Audio Quality Assurance Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-BrUGdCEI.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CzDbXZjA.css">
+</head>
+<body>
+  <!-- 3D Canvas Background Container -->
+  <div id="webgl-container"></div>
+
+  <!-- Ambient Glow Effects -->
+  <div class="ambient-glow glow-blue"></div>
+  <div class="ambient-glow glow-purple"></div>
+
+  <!-- App Wrapper -->
+  <main id="app-wrapper">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo-icon">🔍</span>
+        <div>
+          <h1>ClipCheck <span>3D QA</span></h1>
+          <p class="subtitle">Automated Audio QA Platform</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <span class="status-indicator idle" id="engine-status">Engine Idle</span>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <div class="dashboard-grid">
+      
+      <!-- Left Column: Controls & Configuration -->
+      <section class="panel-column left-panel">
+        
+        <!-- Section: Audio Source Selection -->
+        <div class="glass-panel input-panel">
+          <div class="panel-header">
+            <h2>🎙️ Audio Input Source</h2>
+          </div>
+          
+          <!-- Tab Headers -->
+          <div class="tab-headers">
+            <button class="tab-btn active" id="tab-upload">Upload File</button>
+            <button class="tab-btn" id="tab-record">Record Live</button>
+          </div>
+
+          <!-- Tab Content: Upload -->
+          <div class="tab-content active" id="content-upload">
+            <div class="drop-zone" id="drop-zone">
+              <span class="drop-icon">📤</span>
+              <p class="drop-text">Drag & drop audio files here</p>
+              <span class="drop-subtext">Supports WAV, MP3, OGG, M4A</span>
+              <input type="file" id="file-input" accept="audio/*" class="file-hidden">
+              <button class="btn btn-secondary" id="browse-btn">Browse Files</button>
+            </div>
+            
+            <div class="loaded-file-info hidden" id="file-info-container">
+              <div class="file-meta">
+                <span class="file-icon">🎵</span>
+                <div class="file-details">
+                  <p class="file-name" id="file-name">track.mp3</p>
+                  <p class="file-size" id="file-size">4.2 MB</p>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-full" id="analyze-btn">Run Diagnostics</button>
+            </div>
+          </div>
+
+          <!-- Tab Content: Record -->
+          <div class="tab-content" id="content-record">
+            <div class="record-container">
+              <div class="record-pulse-container">
+                <div class="record-pulse" id="record-pulse"></div>
+                <span class="record-timer" id="record-timer">00:00.0</span>
+              </div>
+              <p class="record-status" id="record-status-text">Ready to Record</p>
+              <div class="record-actions">
+                <button class="btn btn-primary" id="start-record-btn">Start Recording</button>
+                <button class="btn btn-danger hidden" id="stop-record-btn">Stop & Analyze</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: QA Parameters Legend -->
+        <div class="glass-panel legend-panel">
+          <div class="panel-header">
+            <h2>⚖️ QA Decibel Thresholds</h2>
+          </div>
+          <div class="legend-list">
+            <div class="legend-item clipping">
+              <div class="legend-color-tag">💥 Clipping</div>
+              <div class="legend-range">-0.1 to 0 dBFS</div>
+              <div class="legend-deduction">-4% / block</div>
+            </div>
+            <div class="legend-item studio">
+              <div class="legend-color-tag">🟢 Studio</div>
+              <div class="legend-range">-18 to -12 dBFS</div>
+              <div class="legend-deduction">Pristine Pass</div>
+            </div>
+            <div class="legend-item standard">
+              <div class="legend-color-tag">🟡 Standard</div>
+              <div class="legend-range">-24 to -6 dBFS</div>
+              <div class="legend-deduction">Safe Pass</div>
+            </div>
+            <div class="legend-item quiet">
+              <div class="legend-color-tag">📉 Too Quiet</div>
+              <div class="legend-range">-45 to -30 dBFS</div>
+              <div class="legend-deduction">-1% / block</div>
+            </div>
+            <div class="legend-item dead-air">
+              <div class="legend-color-tag">🔇 Dead Air</div>
+              <div class="legend-range">&lt; -50 dBFS</div>
+              <div class="legend-deduction">-3% / sec</div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Results & Waveforms -->
+      <section class="panel-column right-panel">
+        
+        <!-- Score & Stats Widget -->
+        <div class="glass-panel score-panel hidden" id="score-panel">
+          <div class="score-grid">
+            <div class="score-circle-container">
+              <svg viewBox="0 0 100 100" class="score-svg">
+                <circle cx="50" cy="50" r="40" class="score-bg"></circle>
+                <circle cx="50" cy="50" r="40" class="score-progress" id="score-progress-ring"></circle>
+              </svg>
+              <div class="score-value">
+                <span id="score-text">100</span>
+                <span class="score-label">Quality Score</span>
+              </div>
+            </div>
+            
+            <div class="stats-cards">
+              <div class="stat-card">
+                <span class="stat-icon">📈</span>
+                <div class="stat-data">
+                  <span class="stat-val" id="stat-peak-db">-12.5 dB</span>
+                  <span class="stat-label">Peak Volume</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <span class="stat-icon">📉</span>
+                <div class="stat-data">
+                  <span class="stat-val" id="stat-avg-db">-22.1 dB</span>
+                  <span class="stat-label">Average Volume</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <span class="stat-icon">⚠️</span>
+                <div class="stat-data">
+                  <span class="stat-val" id="stat-clipping-count">0</span>
+                  <span class="stat-label">Clipping Blocks</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <span class="stat-icon">🔇</span>
+                <div class="stat-data">
+                  <span class="stat-val" id="stat-dead-air-duration">0.0s</span>
+                  <span class="stat-label">Dead Air Duration</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="verdict-banner" id="verdict-banner">
+            <h3 id="verdict-title">EXCELLENT AUDIO QUALITY</h3>
+            <p id="verdict-desc">Audio exhibits excellent dynamic range and fits professional studio baselines.</p>
+          </div>
+        </div>
+
+
+
+        <!-- Diagnostic Log Table -->
+        <div class="glass-panel log-panel hidden" id="log-panel">
+          <div class="panel-header flex-header">
+            <h2>📜 Error Log & Timestamp Analysis</h2>
+            <button class="btn btn-tiny" id="btn-export-log">Export CSV</button>
+          </div>
+          <div class="table-container">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Audio State</th>
+                  <th>Peak dBFS</th>
+                  <th>Acoustic Character & Verdict</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="log-table-body">
+                <!-- Dynamically generated rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Initial Placeholder Panel -->
+        <div class="glass-panel placeholder-panel" id="placeholder-panel">
+          <div class="placeholder-content">
+            <div class="pulse-ring">
+              <span class="pulse-icon">📊</span>
+            </div>
+            <h3>Waiting for Audio Track</h3>
+            <p>Upload a file or record audio to run mathematical QA diagnostics and see the interactive 3D audio wave.</p>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Sticky Bottom Audio Player Bar -->
+  <div class="sticky-player-bar hidden" id="player-panel">
+    <audio id="audio-player" class="audio-element"></audio>
+    
+    <div class="player-container">
+      <!-- Left: Track Details -->
+      <div class="player-track-info">
+        <span class="player-track-icon">🎵</span>
+        <div class="player-track-meta">
+          <p class="player-track-name" id="player-track-name">No Audio Loaded</p>
+          <p class="player-track-status" id="player-track-status">QA Checked</p>
+        </div>
+      </div>
+
+      <!-- Center: Play/Pause and Timeline -->
+      <div class="player-controls-timeline">
+        <button class="player-btn" id="play-pause-btn">▶</button>
+        
+        <div class="player-timeline">
+          <span class="time-display" id="time-current">0:00</span>
+          <div class="progress-bar-container" id="player-progress-container">
+            <div class="progress-bar" id="player-progress-fill"></div>
+            <!-- Markers will be rendered here dynamically -->
+            <div id="player-markers"></div>
+          </div>
+          <span class="time-display" id="time-duration">0:00</span>
+        </div>
+      </div>
+
+      <!-- Right: Mini Score & Quick Actions -->
+      <div class="player-actions">
+        <div class="mini-score-container">
+          <span class="mini-score-label">Fidelity Score:</span>
+          <span class="mini-score-val" id="mini-score-val">100</span>
+        </div>
+        <button class="btn btn-secondary btn-tiny" id="btn-export-log-bottom">CSV Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Entry -->
+</body>
+</html>
