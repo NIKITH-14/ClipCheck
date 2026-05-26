@@ -67,15 +67,22 @@ body {
   background: var(--accent-blue);
 }
 
-/* 3D Canvas Background */
+/* 3D Canvas Container */
 #webgl-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
+  width: 100%;
+  height: 320px;
+  position: relative;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
   pointer-events: all; /* Allow orbit controls interaction */
+}
+
+#webgl-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* Ambient Ambient Glow Blobs */
@@ -257,6 +264,40 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+/* Desktop layout constraints for independent scrolling */
+@media (min-width: 1025px) {
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  #app-wrapper {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 30px 120px 30px;
+    box-sizing: border-box;
+  }
+  
+  .dashboard-grid {
+    flex: 1;
+    min-height: 0; /* allows children to scroll instead of pushing the grid out */
+    height: 100%;
+  }
+  
+  .left-panel {
+    max-height: 100%;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  
+  .right-panel {
+    max-height: 100%;
+    overflow-y: auto;
+    padding-right: 8px; /* space for scrollbar */
+  }
 }
 
 /* Glassmorphic Panels */
@@ -865,6 +906,11 @@ body {
 }
 
 .log-table tr td:first-child {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.log-table tr td:nth-child(2) {
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text-primary);
@@ -1090,4 +1136,29 @@ body {
 
 .hidden {
   display: none !important;
+}
+
+/* LHS Score Widget Adjustments for Narrow Column */
+.left-panel .score-panel .score-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.left-panel .score-panel .stats-cards {
+  width: 100%;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.left-panel .score-panel .score-circle-container {
+  margin: 0 auto;
+}
+
+/* RHS Legend List Adjustments for Wide Space */
+.right-panel .legend-panel .legend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
 }

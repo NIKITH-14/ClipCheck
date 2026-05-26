@@ -6,13 +6,12 @@
   <title>ClipCheck 3D - Audio Quality Assurance Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/assets/index-D6d7xCjI.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CzDbXZjA.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-D1Ol5u35.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-mqPKDcHa.css">
 </head>
 <body>
-  <!-- 3D Canvas Background Container -->
-  <div id="webgl-container"></div>
+
 
   <!-- Ambient Glow Effects -->
   <div class="ambient-glow glow-blue"></div>
@@ -90,45 +89,6 @@
           </div>
         </div>
 
-        <!-- Section: QA Parameters Legend -->
-        <div class="glass-panel legend-panel">
-          <div class="panel-header">
-            <h2>⚖️ QA Decibel Thresholds</h2>
-          </div>
-          <div class="legend-list">
-            <div class="legend-item clipping">
-              <div class="legend-color-tag">💥 Clipping</div>
-              <div class="legend-range">-0.1 to 0 dBFS</div>
-              <div class="legend-deduction">-4% / block</div>
-            </div>
-            <div class="legend-item studio">
-              <div class="legend-color-tag">🟢 Studio</div>
-              <div class="legend-range">-18 to -12 dBFS</div>
-              <div class="legend-deduction">Pristine Pass</div>
-            </div>
-            <div class="legend-item standard">
-              <div class="legend-color-tag">🟡 Standard</div>
-              <div class="legend-range">-24 to -6 dBFS</div>
-              <div class="legend-deduction">Safe Pass</div>
-            </div>
-            <div class="legend-item quiet">
-              <div class="legend-color-tag">📉 Too Quiet</div>
-              <div class="legend-range">-45 to -30 dBFS</div>
-              <div class="legend-deduction">-1% / block</div>
-            </div>
-            <div class="legend-item dead-air">
-              <div class="legend-color-tag">🔇 Dead Air</div>
-              <div class="legend-range">&lt; -50 dBFS</div>
-              <div class="legend-deduction">-3% / sec</div>
-            </div>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- Right Column: Results & Waveforms -->
-      <section class="panel-column right-panel">
-        
         <!-- Score & Stats Widget -->
         <div class="glass-panel score-panel hidden" id="score-panel">
           <div class="score-grid">
@@ -181,7 +141,18 @@
           </div>
         </div>
 
+      </section>
 
+      <!-- Right Column: Results & Waveforms -->
+      <section class="panel-column right-panel">
+        
+        <!-- 3D Soundwave Visualizer Panel -->
+        <div class="glass-panel visualizer-panel">
+          <div class="panel-header">
+            <h2>🔮 3D Soundwave Visualizer</h2>
+          </div>
+          <div id="webgl-container"></div>
+        </div>
 
         <!-- Diagnostic Log Table -->
         <div class="glass-panel log-panel hidden" id="log-panel">
@@ -193,6 +164,7 @@
             <table class="log-table">
               <thead>
                 <tr>
+                  <th>File Name</th>
                   <th>Timestamp</th>
                   <th>Audio State</th>
                   <th>Peak dBFS</th>
@@ -215,6 +187,40 @@
             </div>
             <h3>Waiting for Audio Track</h3>
             <p>Upload a file or record audio to run mathematical QA diagnostics and see the interactive 3D audio wave.</p>
+          </div>
+        </div>
+
+        <!-- Section: QA Parameters Legend -->
+        <div class="glass-panel legend-panel">
+          <div class="panel-header">
+            <h2>⚖️ QA Decibel Thresholds</h2>
+          </div>
+          <div class="legend-list">
+            <div class="legend-item clipping">
+              <div class="legend-color-tag">💥 Clipping</div>
+              <div class="legend-range">-0.1 to 0 dBFS</div>
+              <div class="legend-deduction">-4% / block</div>
+            </div>
+            <div class="legend-item studio">
+              <div class="legend-color-tag">🟢 Studio</div>
+              <div class="legend-range">-18 to -12 dBFS</div>
+              <div class="legend-deduction">Pristine Pass</div>
+            </div>
+            <div class="legend-item standard">
+              <div class="legend-color-tag">🟡 Standard</div>
+              <div class="legend-range">-24 to -6 dBFS</div>
+              <div class="legend-deduction">Safe Pass</div>
+            </div>
+            <div class="legend-item quiet">
+              <div class="legend-color-tag">📉 Too Quiet</div>
+              <div class="legend-range">-45 to -30 dBFS</div>
+              <div class="legend-deduction">-1% / block</div>
+            </div>
+            <div class="legend-item dead-air">
+              <div class="legend-color-tag">🔇 Dead Air</div>
+              <div class="legend-range">&lt; -50 dBFS</div>
+              <div class="legend-deduction">-3% / sec</div>
+            </div>
           </div>
         </div>
 
@@ -263,6 +269,6 @@
     </div>
   </div>
 
-  <!-- Script Entry -->
+  <!-- Script Entry -->
 </body>
 </html>
