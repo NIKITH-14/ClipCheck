@@ -77,7 +77,15 @@ const els = {
   logPanel: document.getElementById('log-panel'),
   logTableBody: document.getElementById('log-table-body'),
   btnExportLog: document.getElementById('btn-export-log'),
-  placeholderPanel: document.getElementById('placeholder-panel')
+  placeholderPanel: document.getElementById('placeholder-panel'),
+  mathPanel: document.getElementById('math-panel'),
+  vectorABox: document.getElementById('vector-a-box'),
+  similarityPercentage: document.getElementById('similarity-percentage'),
+  mathExplanationText: document.getElementById('math-explanation-text'),
+  physicsPanel: document.getElementById('physics-panel'),
+  compareWaveformCanvas: document.getElementById('compare-waveform-canvas'),
+  canvasTimeInfo: document.getElementById('canvas-time-info'),
+  secondTableBody: document.getElementById('second-table-body')
 };
 
 // ==========================================================================
@@ -388,6 +396,73 @@ function formatTimeSimple(seconds) {
 }
 
 // ==========================================================================
+// Autocorrelation Pitch Detector (maps pitch accurately from 60 Hz to 350 Hz)
+function detectPitchAutocorrelation(channelData, startIdx, endIdx, sampleRate) {
+  const maxWindowSize = 2048;
+  const blockSize = endIdx - startIdx;
+  const windowSize = Math.min(blockSize, maxWindowSize);
+  
+  const minFreq = 60;
+  const maxFreq = 350;
+  const maxPeriod = Math.floor(sampleRate / minFreq);
+  const minPeriod = Math.floor(sampleRate / maxFreq);
+  
+  // Calculate RMS of this window first to make sure it's voiced
+  let sqSum = 0;
+  for (let i = 0; i < windowSize; i++) {
+    const val = channelData[startIdx + i];
+    sqSum += val * val;
+  }
+  const rms = Math.sqrt(sqSum / windowSize);
+  const rmsDb = 20 * Math.log10(rms + 0.000001);
+  
+  // If it's too quiet (below -40 dBFS), it's unvoiced/silent
+  if (rmsDb < -40) {
+    return 0;
+  }
+  
+  let bestLag = -1;
+  let bestR = -1;
+  
+  // Autocorrelation
+  for (let lag = minPeriod; lag <= maxPeriod; lag++) {
+    let sum = 0;
+    let sumSqA = 0;
+    let sumSqB = 0;
+    
+    const limit = windowSize - lag;
+    if (limit <= 0) continue;
+    
+    // To speed up, we step by 2 in the loop
+    for (let i = 0; i < limit; i += 2) {
+      const valA = channelData[startIdx + i];
+      const valB = channelData[startIdx + i + lag];
+      sum += valA * valB;
+      sumSqA += valA * valA;
+      sumSqB += valB * valB;
+    }
+    
+    const norm = Math.sqrt(sumSqA * sumSqB);
+    const r = norm > 0 ? (sum / norm) : 0;
+    
+    if (r > bestR) {
+      bestR = r;
+      bestLag = lag;
+    }
+  }
+  
+  // Only accept if correlation is high enough (e.g. > 0.45)
+  if (bestR > 0.45 && bestLag > 0) {
+    const pitch = sampleRate / bestLag;
+    if (pitch >= minFreq && pitch <= maxFreq) {
+      return pitch;
+    }
+  }
+  
+  return 0;
+}
+
+// ==========================================================================
 // 3. Static File Analyzer
 // ==========================================================================
 async function analyzeAudioBuffer(audioBuffer) {
@@ -412,17 +487,33 @@ async function analyzeAudioBuffer(audioBuffer) {
     
     let blockPeakVal = 0;
     let blockSqSum = 0;
+    let zeroCrossings = 0;
+    let diffSqSum = 0;
     
     for (let s = startIdx; s < endIdx; s++) {
       const sampleVal = Math.abs(channelData[s]);
       if (sampleVal > blockPeakVal) blockPeakVal = sampleVal;
       blockSqSum += channelData[s] * channelData[s];
+      
+      if (s > startIdx) {
+        if ((channelData[s] >= 0 && channelData[s - 1] < 0) || (channelData[s] < 0 && channelData[s - 1] >= 0)) {
+          zeroCrossings++;
+        }
+        const diff = channelData[s] - channelData[s - 1];
+        diffSqSum += diff * diff;
+      }
     }
     
     const blockRmsVal = Math.sqrt(blockSqSum / blockSize);
     const blockPeakDb = rmsToDbfs(blockPeakVal);
     const blockRmsDb = rmsToDbfs(blockRmsVal);
+    const zcr = zeroCrossings / blockSize;
+    const diffRms = Math.sqrt(diffSqSum / blockSize);
+    const hfRatio = diffRms / (blockRmsVal + 0.001);
     
+    const pitchHz = detectPitchAutocorrelation(channelData, startIdx, endIdx, sampleRate);
+
+
     const blockState = classifyState(blockRmsDb, blockPeakDb);
     
     // Accumulate Peak & Average statistics
@@ -441,8 +532,18 @@ async function analyzeAudioBuffer(audioBuffer) {
       end: (i + 1) * blockDuration,
       peak: blockPeakDb,
       rms: blockRmsDb,
-      state: blockState
+      state: blockState,
+      zcr: zcr,
+      hfRatio: hfRatio,
+      pitchHz: pitchHz
     });
+  }
+  
+  // Smooth pitch curve with moving average filter
+  for (let i = 1; i < blocks.length - 1; i++) {
+    if (blocks[i].pitchHz > 0 && blocks[i-1].pitchHz > 0 && blocks[i+1].pitchHz > 0) {
+      blocks[i].pitchHz = (blocks[i-1].pitchHz + blocks[i].pitchHz + blocks[i+1].pitchHz) / 3;
+    }
   }
   
   const finalPeakDb = peakMax;
@@ -516,6 +617,7 @@ async function analyzeAudioBuffer(audioBuffer) {
     avgDbfs: finalAvgDb,
     clippingBlocks: clippingCount,
     deadAirDuration: deadAirSeconds,
+    duration_seconds: totalDuration,
     blocks,
     errors
   };
@@ -672,6 +774,7 @@ function displayAnalysisResults(file, results, objectUrl) {
   els.playerPanel.classList.remove('hidden');
   els.logPanel.classList.remove('hidden');
   
+<<<<<<< HEAD
   // Load into HTML audio player
   els.audioPlayer.src = objectUrl;
   els.audioPlayer.load();
@@ -760,6 +863,100 @@ function calculateStatsFromBlocks(blocks, blockDuration = 0.1) {
 }
 
 function updateScoreAndStatsWidget(results) {
+=======
+  // --- Vector A Calculations ---
+  const blocks = results.blocks || [];
+  let sumRms = 0;
+  let sumZcr = 0;
+  let sumHf = 0;
+  
+  blocks.forEach(b => {
+    sumRms += b.rms;
+    sumZcr += b.zcr || 0;
+    sumHf += b.hfRatio || 0;
+  });
+  
+  const avgRms = blocks.length > 0 ? (sumRms / blocks.length) : -100;
+  const avgZcr = blocks.length > 0 ? (sumZcr / blocks.length) : 0;
+  const avgHf = blocks.length > 0 ? (sumHf / blocks.length) : 0;
+  
+  // Calculate ZCR variance
+  let sumZcrVar = 0;
+  blocks.forEach(b => {
+    const diff = (b.zcr || 0) - avgZcr;
+    sumZcrVar += diff * diff;
+  });
+  const zcrVar = blocks.length > 0 ? (sumZcrVar / blocks.length) : 0;
+  
+  // Normalize parameters to [0.0, 1.0]
+  const normRms = Math.max(0, Math.min(1.0, (avgRms + 60) / 60));
+  const normPeak = Math.max(0, Math.min(1.0, (results.peakDbfs + 60) / 60));
+  const normZcr = Math.max(0, Math.min(1.0, avgZcr * 6.0)); 
+  const normZcrVar = Math.max(0, Math.min(1.0, zcrVar * 80.0));
+  const normHf = Math.max(0, Math.min(1.0, avgHf / 2.5));
+  
+  const vecA = [
+    parseFloat(normRms.toFixed(2)),
+    parseFloat(normPeak.toFixed(2)),
+    parseFloat(normZcr.toFixed(2)),
+    parseFloat(normZcrVar.toFixed(2)),
+    parseFloat(normHf.toFixed(2))
+  ];
+  
+  // Reference Vector B
+  const vecB = [0.70, 0.85, 0.40, 0.15, 0.35];
+  
+  // Cosine Similarity: (A . B) / (||A|| * ||B||)
+  let dotProduct = 0;
+  let magASq = 0;
+  let magBSq = 0;
+  
+  for (let i = 0; i < 5; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    magASq += vecA[i] * vecA[i];
+    magBSq += vecB[i] * vecB[i];
+  }
+  
+  const magA = Math.sqrt(magASq);
+  const magB = Math.sqrt(magBSq);
+  
+  let similarity = 0;
+  if (magA > 0 && magB > 0) {
+    similarity = dotProduct / (magA * magB);
+  }
+  
+  const similarityPct = (similarity * 100).toFixed(1);
+  
+  // Update Math UI Elements
+  if (els.mathPanel) {
+    els.mathPanel.classList.remove('hidden');
+  }
+  if (els.vectorABox) {
+    els.vectorABox.textContent = `[${vecA.map(v => v.toFixed(2)).join(', ')}]`;
+  }
+  if (els.similarityPercentage) {
+    els.similarityPercentage.textContent = `${similarityPct}%`;
+    if (similarity >= 0.92) {
+      els.similarityPercentage.style.color = 'var(--color-studio)';
+    } else if (similarity >= 0.80) {
+      els.similarityPercentage.style.color = 'var(--color-standard)';
+    } else {
+      els.similarityPercentage.style.color = 'var(--color-clipping)';
+    }
+  }
+  if (els.mathExplanationText) {
+    let explanation = '';
+    if (similarity >= 0.92) {
+      explanation = `<strong>Pristine Acoustic Matching:</strong> The audio track exhibits a high cosine match index (${similarityPct}%) with reference voice patterns. Loudness levels are balanced, zero-crossing spectral pitch variance is within standard vocal dynamics, and high-frequency distortion products are minimal.`;
+    } else if (similarity >= 0.80) {
+      explanation = `<strong>Moderate Acoustic Matching:</strong> The similarity score is ${similarityPct}%. There are moderate variations in the pitch variance or loudness profile relative to the studio baseline, indicating potential field recording noise or mild vocal strain.`;
+    } else {
+      explanation = `<strong>Low Acoustic Matching (${similarityPct}%):</strong> Significant acoustic vector mismatch. This indicates either excessive room reverberation, heavy compression noise (high high-frequency ratio), monotone digital anomalies, or digital clipping distortion.`;
+    }
+    els.mathExplanationText.innerHTML = explanation;
+  }
+  
+>>>>>>> dde5e66 (Updated ClipCheck project)
   // 1. Overall Score Ring animation
   els.scoreText.textContent = results.score;
   const dashOffset = 251.2 - (251.2 * results.score) / 100;
@@ -838,6 +1035,26 @@ function updateScoreAndStatsWidget(results) {
       trackStatus.style.color = 'var(--color-clipping)';
     }
   }
+<<<<<<< HEAD
+=======
+
+  // 4. Generate Timeline Markers
+  generateTimelineMarkers(results);
+  
+  // 5. Populate Log Table
+  populateLogTable(results);
+
+  // Show physics panel
+  if (els.physicsPanel) {
+    els.physicsPanel.classList.remove('hidden');
+  }
+
+  // 6. Draw Comparative Waveform
+  drawComparativeWaveform(results);
+
+  // 7. Populate Second-by-Second Table
+  populateSecondTable(results);
+>>>>>>> dde5e66 (Updated ClipCheck project)
 }
 
 function generateTimelineMarkers(results) {
@@ -906,7 +1123,11 @@ function updateLogTable() {
     }
     
     row.innerHTML = `
+<<<<<<< HEAD
       <td>${item.fileName}</td>
+=======
+      <td style="font-weight: 600; color: var(--accent-cyan);">${currentFile ? currentFile.name : 'Live Input'}</td>
+>>>>>>> dde5e66 (Updated ClipCheck project)
       <td>${timeStr}</td>
       <td>${stateBadge}</td>
       <td>${item.err.peak.toFixed(1)} dBFS</td>
@@ -949,6 +1170,7 @@ function bindAudioEvents() {
     // Highlight matching error row in table
     highlightLogTableRow(cur);
     
+<<<<<<< HEAD
     // Dynamically update stats cards during playback
     if (els.audioPlayer && !els.audioPlayer.paused && cur > 0) {
       const nameEl = document.getElementById('player-track-name');
@@ -961,6 +1183,17 @@ function bindAudioEvents() {
           updateScoreAndStatsWidget(runningStats);
         }
       }
+=======
+    // Update playhead on comparative waveform canvas
+    drawPlayheadOnCanvas(cur, dur);
+    
+    // Highlight second-by-second table row
+    highlightSecondTableRow(cur);
+    
+    // Update text time indicator above canvas
+    if (els.canvasTimeInfo) {
+      els.canvasTimeInfo.textContent = `${formatTime(cur)} / ${formatTime(dur)} (Click waveform to seek)`;
+>>>>>>> dde5e66 (Updated ClipCheck project)
     }
   });
   
@@ -998,6 +1231,26 @@ function bindAudioEvents() {
     
     els.audioPlayer.currentTime = seekRatio * els.audioPlayer.duration;
   });
+
+  // comparative canvas click seeking
+  if (els.compareWaveformCanvas) {
+    els.compareWaveformCanvas.addEventListener('click', (e) => {
+      const rect = els.compareWaveformCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+      
+      const chartWidth = width - chartPadding.left - chartPadding.right;
+      let relativeX = clickX - chartPadding.left;
+      if (relativeX < 0) relativeX = 0;
+      if (relativeX > chartWidth) relativeX = chartWidth;
+      
+      const seekRatio = relativeX / chartWidth;
+      
+      if (els.audioPlayer.duration) {
+        els.audioPlayer.currentTime = seekRatio * els.audioPlayer.duration;
+      }
+    });
+  }
 }
 
 function highlightLogTableRow(currentTime) {
@@ -1179,6 +1432,427 @@ function handleSelectedFile(file) {
   els.fileSize.textContent = `${sizeMb.toFixed(2)} MB`;
   
   els.fileInfoContainer.classList.remove('hidden');
+}
+
+// ==========================================================================
+// 7B. Acoustic Physics & Waveform Comparison Functions
+// ==========================================================================
+let waveformPoints = []; // caches values for redraws
+const chartPadding = { left: 65, right: 30, top: 20, bottom: 40 };
+
+// Helper: Map Pitch Hz to Canvas Y coordinates (padded chart area)
+function hzToY(hz, height) {
+  const chartHeight = height - chartPadding.top - chartPadding.bottom;
+  if (hz <= 0) return chartPadding.top + chartHeight; // bottom of the chart
+  const clampedHz = Math.max(50, Math.min(350, hz));
+  const ratio = (clampedHz - 50) / 300;
+  return chartPadding.top + chartHeight * (1 - ratio);
+}
+
+// Helper: Map Time seconds to Canvas X coordinates (padded chart area)
+function timeToX(time, duration, width) {
+  const chartWidth = width - chartPadding.left - chartPadding.right;
+  const ratio = duration > 0 ? time / duration : 0;
+  return chartPadding.left + ratio * chartWidth;
+}
+
+// Draw chart axes, tick marks, and grids
+function drawAxesAndGrid(ctx, width, height, duration) {
+  const chartWidth = width - chartPadding.left - chartPadding.right;
+  const chartHeight = height - chartPadding.top - chartPadding.bottom;
+  
+  // 1. Draw grid lines (horizontal)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+  ctx.lineWidth = 1;
+  const gridLines = 8;
+  for (let i = 1; i < gridLines; i++) {
+    const y = chartPadding.top + (chartHeight / gridLines) * i;
+    ctx.beginPath();
+    ctx.moveTo(chartPadding.left, y);
+    ctx.lineTo(chartPadding.left + chartWidth, y);
+    ctx.stroke();
+  }
+  
+  // 2. Draw Y-axis line (vertical)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(chartPadding.left, chartPadding.top);
+  ctx.lineTo(chartPadding.left, chartPadding.top + chartHeight);
+  ctx.stroke();
+  
+  // Draw X-axis line (horizontal)
+  ctx.beginPath();
+  ctx.moveTo(chartPadding.left, chartPadding.top + chartHeight);
+  ctx.lineTo(chartPadding.left + chartWidth, chartPadding.top + chartHeight);
+  ctx.stroke();
+  
+  // 3. Draw Y-axis tick marks & labels
+  const yTicks = [
+    { hz: 50, label: '50 Hz' },
+    { hz: 80, label: '80 Hz (Low)' },
+    { hz: 140, label: '140 Hz (Normal)' },
+    { hz: 240, label: '240 Hz (High)' },
+    { hz: 350, label: '350 Hz' }
+  ];
+  
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.font = '9px JetBrains Mono';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  
+  yTicks.forEach(tick => {
+    const y = hzToY(tick.hz, height);
+    
+    // Draw tick mark
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.moveTo(chartPadding.left - 5, y);
+    ctx.lineTo(chartPadding.left, y);
+    ctx.stroke();
+    
+    // Draw label
+    ctx.fillText(tick.label, chartPadding.left - 8, y);
+  });
+  
+  // 4. Draw X-axis tick marks & labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  
+  const dur = duration || 1;
+  let step = 1;
+  if (dur <= 10) step = 1;
+  else if (dur <= 30) step = 5;
+  else if (dur <= 60) step = 10;
+  else step = 20;
+  
+  for (let t = 0; t <= dur; t += step) {
+    const x = timeToX(t, dur, width);
+    
+    // Draw tick mark
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.moveTo(x, chartPadding.top + chartHeight);
+    ctx.lineTo(x, chartPadding.top + chartHeight + 5);
+    ctx.stroke();
+    
+    // Draw label
+    ctx.fillText(`${t}s`, x, chartPadding.top + chartHeight + 8);
+    
+    // Draw subtle vertical grid line
+    if (t > 0 && t < dur) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+      ctx.beginPath();
+      ctx.moveTo(x, chartPadding.top);
+      ctx.lineTo(x, chartPadding.top + chartHeight);
+      ctx.stroke();
+    }
+  }
+}
+
+// Draw standard dashed reference lines
+function drawReferenceLines(ctx, width, height) {
+  const chartWidth = width - chartPadding.left - chartPadding.right;
+  
+  // High Standard Pitch Line (240 Hz) - Red Dashed
+  const yHigh = hzToY(240, height);
+  ctx.strokeStyle = 'rgba(255, 45, 85, 0.6)';
+  ctx.setLineDash([3, 4]);
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(chartPadding.left, yHigh);
+  ctx.lineTo(chartPadding.left + chartWidth, yHigh);
+  ctx.stroke();
+  
+  // Normal Standard Pitch Line (140 Hz) - Gold Dashed
+  const yNorm = hzToY(140, height);
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(chartPadding.left, yNorm);
+  ctx.lineTo(chartPadding.left + chartWidth, yNorm);
+  ctx.stroke();
+  
+  // Low Standard Pitch Line (80 Hz) - Blue/Indigo Dashed
+  const yLow = hzToY(80, height);
+  ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+  ctx.beginPath();
+  ctx.moveTo(chartPadding.left, yLow);
+  ctx.lineTo(chartPadding.left + chartWidth, yLow);
+  ctx.stroke();
+  
+  ctx.setLineDash([]); // reset
+}
+
+function drawComparativeWaveform(results) {
+  const canvas = els.compareWaveformCanvas;
+  if (!canvas) return;
+  
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = 280 * window.devicePixelRatio;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  
+  const width = rect.width;
+  const height = 280;
+  const blocks = results.blocks || [];
+  waveformPoints = [];
+  
+  // Cache and ensure duration is computed
+  if (!results.duration_seconds && els.audioPlayer && els.audioPlayer.duration) {
+    results.duration_seconds = els.audioPlayer.duration;
+  }
+  const duration = results.duration_seconds || (blocks.length * 0.1) || 1;
+  results.duration_seconds = duration;
+  
+  // Base background
+  ctx.fillStyle = '#08090c';
+  ctx.fillRect(0, 0, width, height);
+  
+  // Draw Axes and Grid
+  drawAxesAndGrid(ctx, width, height, duration);
+  
+  // Draw Standard reference lines
+  drawReferenceLines(ctx, width, height);
+  
+  if (blocks.length === 0) return;
+  
+  // Cache points
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const time = b.start;
+    const x = timeToX(time, duration, width);
+    const y = hzToY(b.pitchHz, height);
+    waveformPoints.push({ x, y, pitchHz: b.pitchHz, time });
+  }
+  
+  // Draw User Vocal Pitch Curve (Glowing Cyan Continuous Line)
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'var(--accent-cyan)';
+  ctx.strokeStyle = 'var(--accent-cyan)';
+  ctx.lineWidth = 4.0;
+  ctx.beginPath();
+  
+  let activeSegment = false;
+  for (let i = 0; i < waveformPoints.length; i++) {
+    const pt = waveformPoints[i];
+    if (pt.pitchHz > 0) {
+      if (!activeSegment) {
+        ctx.moveTo(pt.x, pt.y);
+        activeSegment = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    } else {
+      activeSegment = false;
+    }
+  }
+  ctx.stroke();
+  
+  // Highlight High Pitch Violations in Glowing Red (>240 Hz)
+  ctx.shadowColor = 'var(--color-clipping)';
+  ctx.strokeStyle = 'var(--color-clipping)';
+  ctx.lineWidth = 5.0;
+  ctx.beginPath();
+  
+  let highSegment = false;
+  for (let i = 0; i < waveformPoints.length; i++) {
+    const pt = waveformPoints[i];
+    if (pt.pitchHz > 240) {
+      if (!highSegment) {
+        ctx.moveTo(pt.x, pt.y);
+        highSegment = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    } else {
+      highSegment = false;
+    }
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0; // reset
+  
+  drawPlayheadOnCanvas(0, duration);
+}
+
+function drawPlayheadOnCanvas(currentTime, duration) {
+  const canvas = els.compareWaveformCanvas;
+  if (!canvas || waveformPoints.length === 0) return;
+  
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  const width = rect.width;
+  const height = 280;
+  const dur = currentAnalysis.duration_seconds || duration || 1;
+  
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#08090c';
+  ctx.fillRect(0, 0, width, height);
+  
+  // Draw Axes and Grid
+  drawAxesAndGrid(ctx, width, height, dur);
+  
+  // Draw reference standard lines
+  drawReferenceLines(ctx, width, height);
+  
+  // Re-draw continuous voice line
+  ctx.strokeStyle = 'var(--accent-cyan)';
+  ctx.lineWidth = 4.0;
+  ctx.beginPath();
+  let activeSegment = false;
+  for (let i = 0; i < waveformPoints.length; i++) {
+    const pt = waveformPoints[i];
+    if (pt.pitchHz > 0) {
+      if (!activeSegment) {
+        ctx.moveTo(pt.x, pt.y);
+        activeSegment = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    } else {
+      activeSegment = false;
+    }
+  }
+  ctx.stroke();
+  
+  // Re-draw high pitch segments in red (> 240 Hz)
+  ctx.strokeStyle = 'var(--color-clipping)';
+  ctx.lineWidth = 5.0;
+  ctx.beginPath();
+  let highSegment = false;
+  for (let i = 0; i < waveformPoints.length; i++) {
+    const pt = waveformPoints[i];
+    if (pt.pitchHz > 240) {
+      if (!highSegment) {
+        ctx.moveTo(pt.x, pt.y);
+        highSegment = true;
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
+    } else {
+      highSegment = false;
+    }
+  }
+  ctx.stroke();
+  
+  // Draw Playhead
+  const x = timeToX(currentTime, dur, width);
+  const chartHeight = height - chartPadding.top - chartPadding.bottom;
+  
+  ctx.strokeStyle = 'var(--accent-cyan)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = 'var(--accent-cyan)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(x, chartPadding.top);
+  ctx.lineTo(x, chartPadding.top + chartHeight);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function populateSecondTable(results) {
+  els.secondTableBody.innerHTML = '';
+  const blocks = results.blocks || [];
+  const duration = Math.floor(results.duration_seconds);
+  
+  for (let sec = 0; sec <= duration; sec++) {
+    const secBlocks = blocks.filter(b => b.start >= sec && b.start < (sec + 1));
+    if (secBlocks.length === 0) continue;
+    
+    let sumPitch = 0;
+    let voicedCount = 0;
+    let clipCount = 0;
+    let deadAirCount = 0;
+    let quietCount = 0;
+    
+    secBlocks.forEach(b => {
+      if (b.pitchHz > 0) {
+        sumPitch += b.pitchHz;
+        voicedCount++;
+      }
+      if (b.state === 'Clipping') clipCount++;
+      if (b.state === 'Dead Air') deadAirCount++;
+      if (b.state === 'Too Quiet') quietCount++;
+    });
+    
+    const avgPitch = voicedCount > 0 ? (sumPitch / voicedCount) : 0;
+    
+    // Pitch Corridor calculations (80 to 240 Hz)
+    let deviation = 0;
+    let devClass = 'good';
+    let comment = '';
+    let dominantState = 'Standard';
+    
+    if (avgPitch > 240) {
+      deviation = avgPitch - 240;
+      devClass = 'bad'; // High pitch violation
+      comment = `⚠️ <strong>High Pitch:</strong> Vocal pitch hit <strong>${Math.round(avgPitch)} Hz</strong>, exceeding standard limit. Acoustic strain detected.`;
+      dominantState = 'High Pitch'; // represent as high alarm
+    } else if (avgPitch > 0 && avgPitch < 80) {
+      deviation = avgPitch - 80;
+      devClass = 'warn'; // Low pitch
+      comment = `📉 <strong>Low Pitch:</strong> Vocal pitch dropped to <strong>${Math.round(avgPitch)} Hz</strong>. Monotone baseline.`;
+      dominantState = 'Too Quiet';
+    } else if (avgPitch === 0) {
+      deviation = 0;
+      devClass = 'warn';
+      comment = `🔇 <strong>Unvoiced Gap:</strong> Sound drops below threshold. Dead air or silence zone.`;
+      dominantState = 'Dead Air';
+    } else {
+      deviation = 0;
+      devClass = 'good';
+      comment = `🟢 <strong>Optimal Pitch:</strong> Pitch is stable at <strong>${Math.round(avgPitch)} Hz</strong>. Natural voice harmony corridor.`;
+      dominantState = 'Studio';
+    }
+    
+    const devText = deviation === 0 ? '0 Hz' : `${deviation > 0 ? '+' : ''}${Math.round(deviation)} Hz`;
+    
+    // Applied penalty inside this specific second
+    let penalty = 0;
+    if (clipCount > 0) penalty += clipCount * 4;
+    if (quietCount > 0) penalty += quietCount * 1;
+    if (deadAirCount > 0) penalty += 3.0;
+    
+    const penaltyText = penalty === 0 ? '0%' : `-${Math.round(penalty)}%`;
+    const stateBadge = `<span class="badge badge-${dominantState.toLowerCase().replace(' ', '-')}">${dominantState}</span>`;
+    
+    const row = document.createElement('tr');
+    row.id = `sec-row-${sec}`;
+    row.innerHTML = `
+      <td>${sec}.0s</td>
+      <td>80 - 240 Hz</td>
+      <td style="font-family: var(--font-mono); font-weight:700;">${avgPitch > 0 ? Math.round(avgPitch) + ' Hz' : 'Unvoiced'}</td>
+      <td><span class="deviation-val ${devClass}">${devText}</span></td>
+      <td style="font-weight: 700; color: ${penalty > 0 ? 'var(--color-clipping)' : 'var(--color-studio)'};">${penaltyText}</td>
+      <td><span class="table-desc">${comment}</span></td>
+      <td><button class="play-row-btn" data-start="${sec}">Jump</button></td>
+    `;
+    
+    els.secondTableBody.appendChild(row);
+  }
+  
+  // Register click seek listeners
+  els.secondTableBody.querySelectorAll('.play-row-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const startT = parseFloat(e.target.dataset.start);
+      els.audioPlayer.currentTime = startT;
+      els.audioPlayer.play();
+      els.playPauseBtn.textContent = '⏸';
+    });
+  });
+}
+
+function highlightSecondTableRow(currentTime) {
+  const currentSec = Math.floor(currentTime);
+  
+  els.secondTableBody.querySelectorAll('tr').forEach(r => r.classList.remove('active-row'));
+  
+  const row = document.getElementById(`sec-row-${currentSec}`);
+  if (row) {
+    row.classList.add('active-row');
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 // ==========================================================================

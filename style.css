@@ -67,6 +67,7 @@ body {
   background: var(--accent-blue);
 }
 
+<<<<<<< HEAD
 /* 3D Canvas Container */
 #webgl-container {
   width: 100%;
@@ -77,6 +78,17 @@ body {
   border: 1px solid var(--panel-border);
   overflow: hidden;
   pointer-events: all; /* Allow orbit controls interaction */
+=======
+/* 3D Canvas Visualizer Container */
+#webgl-container {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+>>>>>>> dde5e66 (Updated ClipCheck project)
 }
 
 #webgl-container canvas {
@@ -125,11 +137,7 @@ body {
   max-width: 1600px;
   margin: 0 auto;
   padding: 30px;
-  pointer-events: none; /* Let clicks pass to 3D canvas unless hitting panels */
-}
-
-#app-wrapper * {
-  pointer-events: auto; /* Re-enable pointer events for UI elements */
+  pointer-events: auto;
 }
 
 /* Header */
@@ -926,6 +934,7 @@ body {
 }
 
 .badge-clipping { background: rgba(255, 45, 85, 0.15); color: var(--color-clipping); border: 1px solid rgba(255, 45, 85, 0.3); }
+.badge-high-pitch { background: rgba(255, 45, 85, 0.15); color: var(--color-clipping); border: 1px solid rgba(255, 45, 85, 0.3); }
 .badge-studio { background: rgba(16, 185, 129, 0.15); color: var(--color-studio); border: 1px solid rgba(16, 185, 129, 0.3); }
 .badge-standard { background: rgba(245, 158, 11, 0.15); color: var(--color-standard); border: 1px solid rgba(245, 158, 11, 0.3); }
 .badge-quiet { background: rgba(99, 102, 241, 0.15); color: var(--color-quiet); border: 1px solid rgba(99, 102, 241, 0.3); }
@@ -1133,6 +1142,229 @@ body {
 #app-wrapper {
   padding-bottom: 120px;
 }
+
+/* Math Panel Styling */
+.math-panel {
+  margin-top: 24px;
+}
+
+.math-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.math-column h3 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.vector-display {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vector-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vector-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.vector-box {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  color: var(--accent-cyan);
+}
+
+.vector-box.reference-vector {
+  color: var(--color-studio);
+}
+
+.vector-features-list {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.vector-features-list code {
+  color: var(--text-secondary);
+}
+
+.alignment-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.similarity-score-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 14px 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.similarity-percentage {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+
+.similarity-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.math-formula {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.15);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.math-explanation {
+  background: rgba(0, 243, 255, 0.03);
+  border: 1px solid rgba(0, 243, 255, 0.1);
+  padding: 14px;
+  border-radius: var(--radius-md);
+}
+
+.math-explanation h3 {
+  font-size: 12px;
+  color: var(--accent-cyan);
+  margin-bottom: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.math-explanation p {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Physics Panel & Comparative Waveform */
+.physics-panel {
+  margin-top: 24px;
+}
+
+.canvas-legend {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-secondary);
+}
+
+.legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 0;
+  border-top: 1.5px dashed;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.line-high {
+  border-top-color: var(--color-clipping);
+}
+
+.line-norm {
+  border-top-color: var(--color-standard);
+}
+
+.line-low {
+  border-top-color: var(--color-quiet);
+}
+
+.line-voice {
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: var(--accent-cyan);
+}
+
+.waveform-container {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+#compare-waveform-canvas {
+  width: 100%;
+  height: 280px;
+  display: block;
+  cursor: pointer;
+}
+
+.time-slider-info {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 6px;
+}
+
+.second-analysis-title {
+  margin: 24px 0 12px 0;
+}
+
+.second-analysis-title h3 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+.second-table-container {
+  max-height: 320px;
+}
+
+.second-table th {
+  font-size: 11px;
+}
+
+.second-table td {
+  padding: 8px 12px;
+}
+
+.deviation-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.deviation-val.good { color: var(--color-studio); }
+.deviation-val.warn { color: var(--color-standard); }
+.deviation-val.bad { color: var(--color-clipping); }
 
 .hidden {
   display: none !important;

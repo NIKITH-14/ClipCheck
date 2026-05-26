@@ -10,8 +10,11 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> dde5e66 (Updated ClipCheck project)
   <!-- Ambient Glow Effects -->
   <div class="ambient-glow glow-blue"></div>
   <div class="ambient-glow glow-purple"></div>
@@ -173,6 +176,90 @@
               </thead>
               <tbody id="log-table-body">
                 <!-- Dynamically generated rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Vector & Fingerprint Analysis Panel -->
+        <div class="glass-panel math-panel hidden" id="math-panel">
+          <div class="panel-header">
+            <h2>📐 Mathematical Vector & Acoustic Fingerprint Analysis</h2>
+          </div>
+          <div class="math-grid">
+            <div class="math-column">
+              <h3>Acoustic Embedding Vectors</h3>
+              <div class="vector-display">
+                <div class="vector-row">
+                  <span class="vector-label">Vector A (Uploaded Audio):</span>
+                  <div class="vector-box" id="vector-a-box">[0.00, 0.00, 0.00, 0.00, 0.00]</div>
+                </div>
+                <div class="vector-row">
+                  <span class="vector-label">Vector B (Studio Reference):</span>
+                  <div class="vector-box reference-vector">[0.70, 0.85, 0.40, 0.15, 0.35]</div>
+                </div>
+              </div>
+              <div class="vector-features-list">
+                <p>Vector Dimensions: <code>[Loudness, Peak, Avg Pitch (ZCR), Pitch Variance, High Freq Ratio]</code></p>
+              </div>
+            </div>
+            
+            <div class="math-column alignment-column">
+              <h3>Cosine Similarity Matching</h3>
+              <div class="similarity-score-container">
+                <div class="similarity-percentage" id="similarity-percentage">0.0%</div>
+                <div class="similarity-label">Reference Match</div>
+              </div>
+              <div class="math-formula">
+                <code>Similarity = (A · B) / (||A|| * ||B||)</code>
+              </div>
+            </div>
+          </div>
+          
+          <div class="math-explanation">
+            <h3>Quality Index Derivation</h3>
+            <p id="math-explanation-text">Waiting for audio ingestion to compute cosine vector matching...</p>
+          </div>
+        </div>
+
+        <!-- Acoustic Physics & Comparative Waveform Console -->
+        <div class="glass-panel physics-panel hidden" id="physics-panel">
+          <div class="panel-header flex-header">
+            <h2>📊 Acoustic Physics & Vocal Pitch (F0) Comparison Console</h2>
+            <div class="canvas-legend">
+              <span class="legend-line line-high"></span> High Pitch (240 Hz)
+              <span class="legend-line line-norm"></span> Normal Pitch (140 Hz)
+              <span class="legend-line line-low"></span> Low Pitch (80 Hz)
+              <span class="legend-line line-voice"></span> Vocal F0 Curve
+            </div>
+          </div>
+          
+          <!-- Comparative Waveform Canvas -->
+          <div class="waveform-container">
+            <canvas id="compare-waveform-canvas"></canvas>
+            <div class="time-slider-info" id="canvas-time-info">0.00s / 0.00s (Click waveform to seek)</div>
+          </div>
+          
+          <div class="second-analysis-title">
+            <h3>⏱️ Second-by-Second Pitch & Variance Breakdown</h3>
+          </div>
+          
+          <!-- Second-by-second table -->
+          <div class="table-container second-table-container">
+            <table class="log-table second-table">
+              <thead>
+                <tr>
+                  <th>Time (s)</th>
+                  <th>Standard Pitch</th>
+                  <th>Detected Pitch</th>
+                  <th>Pitch Deviation</th>
+                  <th>Penalty</th>
+                  <th>Acoustic Verdict & Explanation Comments</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="second-table-body">
+                <!-- Filled dynamically -->
               </tbody>
             </table>
           </div>
