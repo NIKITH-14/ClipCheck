@@ -25,6 +25,7 @@ let animationFrameId;
 
 // Analysis Results Cache
 let currentFile = null;
+let analyzedFiles = [];
 let currentAnalysis = {
   score: 100,
   peakDbfs: -100,
@@ -142,7 +143,7 @@ function init3D() {
   scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
   // Drag controls
-  window.addEventListener('mousedown', (e) => {
+  els.webglContainer.addEventListener('mousedown', (e) => {
     isDragging = true;
     previousMousePosition = { x: e.clientX, y: e.clientY };
   });
@@ -163,7 +164,7 @@ function init3D() {
   });
 
   // Handle Touch for Mobile
-  window.addEventListener('touchstart', (e) => {
+  els.webglContainer.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
       isDragging = true;
       previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -209,9 +210,19 @@ function animate() {
     // Identify current state during playback/recording
     if (els.audioPlayer && !els.audioPlayer.paused) {
       const t = els.audioPlayer.currentTime;
-      const currentBlock = currentAnalysis.blocks.find(b => t >= b.start && t < b.end);
-      if (currentBlock) {
-        state = currentBlock.state;
+      const nameEl = document.getElementById('player-track-name');
+      const activeFileName = nameEl ? nameEl.textContent : '';
+      const activeFile = analyzedFiles.find(f => f.name === activeFileName);
+      if (activeFile) {
+        const currentBlock = activeFile.results.blocks.find(b => t >= b.start && t < b.end);
+        if (currentBlock) {
+          state = currentBlock.state;
+        }
+      } else {
+        const currentBlock = currentAnalysis.blocks.find(b => t >= b.start && t < b.end);
+        if (currentBlock) {
+          state = currentBlock.state;
+        }
       }
     } else if (mediaRecorder && mediaRecorder.state === 'recording') {
       state = els.statusIndicator.textContent.includes('Clipping') ? 'Clipping' : 
@@ -540,14 +551,8 @@ async function startLiveRecording() {
       els.statusIndicator.textContent = 'Engine Idle';
       els.statusIndicator.className = 'status-indicator idle';
       
-      const nameEl = document.getElementById('player-track-name');
-      if (nameEl) nameEl.textContent = 'Live Microphone Input';
-      
       const audioBlob = new Blob(recordedChunks, { type: 'audio/wav' });
       const audioUrl = URL.createObjectURL(audioBlob);
-      
-      els.audioPlayer.src = audioUrl;
-      els.audioPlayer.load();
       
       // Decode and analyze full recorded file
       els.statusIndicator.textContent = 'Analyzing Track...';
@@ -557,7 +562,8 @@ async function startLiveRecording() {
         const arrayBuffer = await audioBlob.arrayBuffer();
         const decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
         const results = await analyzeAudioBuffer(decodedBuffer);
-        displayAnalysisResults(results);
+        const recordName = `Live Recording (${new Date().toLocaleTimeString()})`;
+        displayAnalysisResults({ name: recordName }, results, audioUrl);
       } catch (err) {
         console.error('Failed to decode recording:', err);
         alert('Could not decode recorded audio.');
@@ -617,6 +623,11 @@ function runRecordingLoop() {
   // Add live blocks to trigger 3D color morph
   liveBlocks.push({ peak: peakDb, rms: rmsDb, state: liveState });
   
+  // Update Quality Score & Stats widget in real-time during recording
+  const runningStats = calculateStatsFromBlocks(liveBlocks);
+  els.scorePanel.classList.remove('hidden');
+  updateScoreAndStatsWidget(runningStats);
+  
   recordTimerInterval = setTimeout(runRecordingLoop, 100);
 }
 
@@ -637,7 +648,22 @@ function stopLiveRecording() {
 // ==========================================================================
 // 5. Diagnostics Dashboard Renderer
 // ==========================================================================
-function displayAnalysisResults(results) {
+function displayAnalysisResults(file, results, objectUrl) {
+  // Add to analyzedFiles list
+  const fileEntry = {
+    name: file.name,
+    url: objectUrl,
+    results: results
+  };
+  
+  const existingIdx = analyzedFiles.findIndex(f => f.name === file.name);
+  if (existingIdx !== -1) {
+    analyzedFiles[existingIdx] = fileEntry;
+  } else {
+    analyzedFiles.push(fileEntry);
+  }
+  
+  // Set currentAnalysis to the latest results for fallback compatibility
   currentAnalysis = results;
   
   // Show panels & hide placeholders
@@ -646,6 +672,94 @@ function displayAnalysisResults(results) {
   els.playerPanel.classList.remove('hidden');
   els.logPanel.classList.remove('hidden');
   
+  // Load into HTML audio player
+  els.audioPlayer.src = objectUrl;
+  els.audioPlayer.load();
+  const nameEl = document.getElementById('player-track-name');
+  if (nameEl) nameEl.textContent = file.name;
+  
+  // Update score & stats widget
+  updateScoreAndStatsWidget(results);
+  
+  // Re-generate timeline markers
+  generateTimelineMarkers(results);
+  
+  // Update log table (all files combined)
+  updateLogTable();
+}
+
+function switchActiveFile(fileName) {
+  const fileEntry = analyzedFiles.find(f => f.name === fileName);
+  if (!fileEntry) return;
+
+  // Update currentAnalysis reference
+  currentAnalysis = fileEntry.results;
+
+  // Load in player if not active
+  if (els.audioPlayer.src !== fileEntry.url) {
+    els.audioPlayer.src = fileEntry.url;
+    els.audioPlayer.load();
+    const nameEl = document.getElementById('player-track-name');
+    if (nameEl) nameEl.textContent = fileEntry.name;
+  }
+
+  // Update score & stats widget
+  updateScoreAndStatsWidget(fileEntry.results);
+  
+  // Re-generate timeline markers
+  generateTimelineMarkers(fileEntry.results);
+}
+
+function calculateStatsFromBlocks(blocks, blockDuration = 0.1) {
+  if (!blocks || blocks.length === 0) {
+    return {
+      score: 100,
+      peakDbfs: -100,
+      avgDbfs: -100,
+      clippingBlocks: 0,
+      deadAirDuration: 0
+    };
+  }
+  
+  let peakMax = -100;
+  let rmsSum = 0;
+  let validRmsCount = 0;
+  let clippingCount = 0;
+  let deadAirSeconds = 0;
+  
+  blocks.forEach(b => {
+    if (b.peak > peakMax) peakMax = b.peak;
+    if (b.rms > -80) {
+      rmsSum += b.rms;
+      validRmsCount++;
+    }
+    if (b.state === 'Clipping') clippingCount++;
+    if (b.state === 'Dead Air') deadAirSeconds += blockDuration;
+  });
+  
+  const finalPeakDb = peakMax;
+  const finalAvgDb = validRmsCount > 0 ? (rmsSum / validRmsCount) : -100;
+  
+  // Deductions
+  let score = 100;
+  const clippingDeduction = clippingCount * 4;
+  const tooQuietCount = blocks.filter(b => b.state === 'Too Quiet').length;
+  const tooQuietDeduction = tooQuietCount * 1;
+  const deadAirDeduction = Math.floor(deadAirSeconds) * 3;
+  
+  score = score - (clippingDeduction + tooQuietDeduction + deadAirDeduction);
+  score = Math.max(0, Math.min(100, score));
+  
+  return {
+    score,
+    peakDbfs: finalPeakDb,
+    avgDbfs: finalAvgDb,
+    clippingBlocks: clippingCount,
+    deadAirDuration: deadAirSeconds
+  };
+}
+
+function updateScoreAndStatsWidget(results) {
   // 1. Overall Score Ring animation
   els.scoreText.textContent = results.score;
   const dashOffset = 251.2 - (251.2 * results.score) / 100;
@@ -724,12 +838,6 @@ function displayAnalysisResults(results) {
       trackStatus.style.color = 'var(--color-clipping)';
     }
   }
-
-  // 4. Generate Timeline Markers
-  generateTimelineMarkers(results);
-  
-  // 5. Populate Log Table
-  populateLogTable(results);
 }
 
 function generateTimelineMarkers(results) {
@@ -749,13 +857,24 @@ function generateTimelineMarkers(results) {
   });
 }
 
-function populateLogTable(results) {
+function updateLogTable() {
   els.logTableBody.innerHTML = '';
   
-  if (results.errors.length === 0) {
+  // Accumulate all errors
+  let allErrors = [];
+  analyzedFiles.forEach(fileEntry => {
+    fileEntry.results.errors.forEach(err => {
+      allErrors.push({
+        fileName: fileEntry.name,
+        err: err
+      });
+    });
+  });
+  
+  if (allErrors.length === 0) {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td colspan="5" style="text-align: center; color: var(--color-studio); font-weight: 600; padding: 24px;">
+      <td colspan="6" style="text-align: center; color: var(--color-studio); font-weight: 600; padding: 24px;">
         ✨ Pristine Pass! No clipping, silent gaps, or under-amplified blocks detected.
       </td>
     `;
@@ -763,15 +882,18 @@ function populateLogTable(results) {
     return;
   }
   
-  results.errors.forEach((err, idx) => {
+  allErrors.forEach((item, idx) => {
     const row = document.createElement('tr');
     row.id = `log-row-${idx}`;
+    row.dataset.fileName = item.fileName;
+    row.dataset.start = item.err.start;
+    row.dataset.end = item.err.end;
     
-    const timeStr = `${err.start.toFixed(1)}s - ${err.end.toFixed(1)}s`;
-    const stateBadge = `<span class="badge badge-${err.state.toLowerCase().replace(' ', '-')}">${err.state}</span>`;
+    const timeStr = `${item.err.start.toFixed(1)}s - ${item.err.end.toFixed(1)}s`;
+    const stateBadge = `<span class="badge badge-${item.err.state.toLowerCase().replace(' ', '-')}">${item.err.state}</span>`;
     
     let description = '';
-    switch (err.state) {
+    switch (item.err.state) {
       case 'Clipping':
         description = '💥 <strong>Volume Overload:</strong> Flat curves. Causes harsh, buzzing distortion.';
         break;
@@ -784,11 +906,12 @@ function populateLogTable(results) {
     }
     
     row.innerHTML = `
+      <td>${item.fileName}</td>
       <td>${timeStr}</td>
       <td>${stateBadge}</td>
-      <td>${err.peak.toFixed(1)} dBFS</td>
+      <td>${item.err.peak.toFixed(1)} dBFS</td>
       <td><span class="table-desc">${description}</span></td>
-      <td><button class="play-row-btn" data-start="${err.start}">Seek & Play</button></td>
+      <td><button class="play-row-btn" data-file="${item.fileName}" data-start="${item.err.start}">Seek & Play</button></td>
     `;
     
     els.logTableBody.appendChild(row);
@@ -797,7 +920,10 @@ function populateLogTable(results) {
   // Attach listeners to rows play button
   document.querySelectorAll('.play-row-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      const fileName = e.target.dataset.file;
       const startT = parseFloat(e.target.dataset.start);
+      
+      switchActiveFile(fileName);
       els.audioPlayer.currentTime = startT;
       els.audioPlayer.play();
       els.playPauseBtn.textContent = '⏸';
@@ -822,10 +948,31 @@ function bindAudioEvents() {
     
     // Highlight matching error row in table
     highlightLogTableRow(cur);
+    
+    // Dynamically update stats cards during playback
+    if (els.audioPlayer && !els.audioPlayer.paused && cur > 0) {
+      const nameEl = document.getElementById('player-track-name');
+      const activeFileName = nameEl ? nameEl.textContent : '';
+      const activeFile = analyzedFiles.find(f => f.name === activeFileName);
+      if (activeFile) {
+        const playedBlocks = activeFile.results.blocks.filter(b => b.start <= cur);
+        if (playedBlocks.length > 0) {
+          const runningStats = calculateStatsFromBlocks(playedBlocks);
+          updateScoreAndStatsWidget(runningStats);
+        }
+      }
+    }
   });
   
   els.audioPlayer.addEventListener('ended', () => {
     els.playPauseBtn.textContent = '▶';
+    // Restore overall stats of the active file
+    const nameEl = document.getElementById('player-track-name');
+    const activeFileName = nameEl ? nameEl.textContent : '';
+    const activeFile = analyzedFiles.find(f => f.name === activeFileName);
+    if (activeFile) {
+      updateScoreAndStatsWidget(activeFile.results);
+    }
   });
   
   els.playPauseBtn.addEventListener('click', () => {
@@ -854,37 +1001,52 @@ function bindAudioEvents() {
 }
 
 function highlightLogTableRow(currentTime) {
-  currentAnalysis.errors.forEach((err, idx) => {
-    const row = document.getElementById(`log-row-${idx}`);
-    if (row) {
-      if (currentTime >= err.start && currentTime < err.end) {
-        row.classList.add('active-row');
-      } else {
-        row.classList.remove('active-row');
-      }
+  const nameEl = document.getElementById('player-track-name');
+  const activeFileName = nameEl ? nameEl.textContent : '';
+
+  const rows = els.logTableBody.querySelectorAll('tr');
+  rows.forEach(row => {
+    const rowFile = row.dataset.fileName;
+    const start = parseFloat(row.dataset.start);
+    const end = parseFloat(row.dataset.end);
+    
+    if (rowFile === activeFileName && currentTime >= start && currentTime < end) {
+      row.classList.add('active-row');
+    } else {
+      row.classList.remove('active-row');
     }
   });
 }
 
 // Export Log to CSV
 function exportLogToCSV() {
-  if (!currentAnalysis.errors.length) return;
+  let allErrors = [];
+  analyzedFiles.forEach(fileEntry => {
+    fileEntry.results.errors.forEach(err => {
+      allErrors.push({
+        fileName: fileEntry.name,
+        err: err
+      });
+    });
+  });
+
+  if (!allErrors.length) return;
   
   let csvContent = 'data:text/csv;charset=utf-8,';
-  csvContent += 'Start Time (s),End Time (s),Error Type,Peak dBFS,Average dBFS,Description\r\n';
+  csvContent += 'File Name,Start Time (s),End Time (s),Error Type,Peak dBFS,Average dBFS,Description\r\n';
   
-  currentAnalysis.errors.forEach(err => {
-    const startStr = err.start.toFixed(2);
-    const endStr = err.end.toFixed(2);
-    const description = err.state === 'Clipping' ? 'Volume Overload' : err.state === 'Too Quiet' ? 'Under-amplified' : 'Digital Silence';
+  allErrors.forEach(item => {
+    const startStr = item.err.start.toFixed(2);
+    const endStr = item.err.end.toFixed(2);
+    const description = item.err.state === 'Clipping' ? 'Volume Overload' : item.err.state === 'Too Quiet' ? 'Under-amplified' : 'Digital Silence';
     
-    csvContent += `${startStr},${endStr},"${err.state}",${err.peak.toFixed(2)},${err.rmsSum / err.blockCount},"${description}"\r\n`;
+    csvContent += `"${item.fileName}",${startStr},${endStr},"${item.err.state}",${item.err.peak.toFixed(2)},${item.err.rmsSum / item.err.blockCount},"${description}"\r\n`;
   });
   
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `${currentFile ? currentFile.name.replace(/\.[^/.]+$/, "") : 'clipcheck'}_qa_log.csv`);
+  link.setAttribute('download', `clipcheck_combined_qa_log.csv`);
   document.body.appendChild(link);
   
   link.click();
@@ -970,10 +1132,8 @@ function bindUIEvents() {
         
         // Load in HTML audio player
         const objectUrl = URL.createObjectURL(currentFile);
-        els.audioPlayer.src = objectUrl;
-        els.audioPlayer.load();
         
-        displayAnalysisResults(results);
+        displayAnalysisResults(currentFile, results, objectUrl);
       } catch (err) {
         console.error('Offline audio decode failed:', err);
         alert('Decoding failed. Please upload a standard audio file (MP3, WAV).');
