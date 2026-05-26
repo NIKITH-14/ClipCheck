@@ -910,6 +910,17 @@ function bindUIEvents() {
     els.contentUpload.classList.remove('active');
   });
   
+  // Click drop zone to trigger file picker
+  els.dropZone.addEventListener('click', (e) => {
+    if (e.target !== els.browseBtn) {
+      els.fileInput.click();
+    }
+  });
+
+  // Global window drag & drop prevention to stop file navigation
+  window.addEventListener('dragover', (e) => e.preventDefault(), false);
+  window.addEventListener('drop', (e) => e.preventDefault(), false);
+
   // Drag & Drop
   els.dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -928,7 +939,8 @@ function bindUIEvents() {
     }
   });
   
-  els.browseBtn.addEventListener('click', () => {
+  els.browseBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // stop triggering zone click again
     els.fileInput.click();
   });
   
@@ -987,8 +999,13 @@ function bindUIEvents() {
 }
 
 function handleSelectedFile(file) {
-  if (!file.type.startsWith('audio/')) {
-    alert('Please upload an audio file.');
+  const allowedExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm', 'wma', 'mp4', 'mkv', 'mov', '3gp'];
+  const fileExtension = file.name.split('.').pop().toLowerCase();
+  const isAudioOrVideoMime = file.type.startsWith('audio/') || file.type.startsWith('video/');
+  const isAudioOrVideoExt = allowedExtensions.includes(fileExtension);
+  
+  if (!isAudioOrVideoMime && !isAudioOrVideoExt) {
+    alert('Please upload a valid audio or video file (MP3, WAV, OGG, M4A, FLAC, MP4, etc.).');
     return;
   }
   currentFile = file;
